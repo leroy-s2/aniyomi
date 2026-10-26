@@ -96,7 +96,7 @@ fun NetworkAnimeExtensionStore.ExtensionList.toAvailableExtensions(
     return extensions.map { extension ->
         val lang = extension.sources.map { it.language }.toSet()
         AnimeExtension.Available(
-            name = extension.name,
+            name = extension.name.removePrefix("Aniyomi: ").removePrefix("Tachiyomi: "),
             pkgName = extension.packageName,
             apkUrl = extension.resources.apkUrl,
             iconUrl = extension.resources.iconUrl,

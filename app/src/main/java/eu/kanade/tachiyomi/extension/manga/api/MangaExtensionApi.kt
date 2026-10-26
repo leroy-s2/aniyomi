@@ -213,7 +213,7 @@ internal class MangaExtensionApi {
     ): List<MangaExtension.Available> {
         return map { extension ->
             MangaExtension.Available(
-                name = extension.name,
+                name = extension.name.removePrefix("Tachiyomi: "),
                 pkgName = extension.packageName,
                 versionName = extension.versionName,
                 versionCode = extension.versionCode,
