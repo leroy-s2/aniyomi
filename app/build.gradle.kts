@@ -216,6 +216,7 @@ dependencies {
 
     implementation(kotlinx.reflect)
     implementation(kotlinx.immutables)
+    implementation(kotlinx.serialization.protobuf)
 
     implementation(platform(kotlinx.coroutines.bom))
     implementation(kotlinx.bundles.coroutines)

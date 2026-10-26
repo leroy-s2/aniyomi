@@ -9,11 +9,14 @@ import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionLoader
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.awaitSuccess
-import eu.kanade.tachiyomi.network.parseAs
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.protobuf.ProtoBuf
+import kotlinx.serialization.protobuf.ProtoNumber
+import kotlinx.serialization.json.okio.decodeFromBufferedSource
 import logcat.LogPriority
 import mihon.domain.extensionrepo.manga.interactor.GetMangaExtensionRepo
 import mihon.domain.extensionrepo.manga.interactor.UpdateMangaExtensionRepo
@@ -22,6 +25,10 @@ import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
+import okio.BufferedSource
+import okio.buffer
+import okio.gzip
+import kotlin.coroutines.cancellation.CancellationException
 import uy.kohesive.injekt.injectLazy
 import java.time.Instant
 import kotlin.time.Duration.Companion.days
@@ -34,6 +41,7 @@ internal class MangaExtensionApi {
     private val updateExtensionRepo: UpdateMangaExtensionRepo by injectLazy()
     private val extensionManager: MangaExtensionManager by injectLazy()
     private val json: Json by injectLazy()
+    private val protoBuf = ProtoBuf { }
 
     private val lastExtCheck: Preference<Long> by lazy {
         preferenceStore.getLong("last_ext_check", 0)
@@ -51,14 +59,25 @@ internal class MangaExtensionApi {
     private suspend fun getExtensions(extRepo: ExtensionRepo): List<MangaExtension.Available> {
         val repoBaseUrl = extRepo.baseUrl
         return try {
-            val response = networkService.client
-                .newCall(GET("$repoBaseUrl/index.min.json"))
-                .awaitSuccess()
+            val response = try {
+                networkService.client.newCall(GET("$repoBaseUrl/index.pb")).awaitSuccess()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                networkService.client.newCall(GET("$repoBaseUrl/index.min.json")).awaitSuccess()
+            }
 
-            with(json) {
-                response
-                    .parseAs<List<ExtensionJsonObject>>()
-                    .toExtensions(repoBaseUrl)
+            response.body.source().decompressIfGzipped().use { source ->
+                val firstByte = source.peek().use { it.readByte() }
+                if (firstByte == '{'.code.toByte() || firstByte == '['.code.toByte()) {
+                    json.decodeFromBufferedSource<List<ExtensionJsonObject>>(source)
+                        .toExtensions(repoBaseUrl)
+                } else {
+                    protoBuf.decodeFromByteArray<NetworkExtensionStore>(source.readByteArray())
+                        .extensionList
+                        .orEmpty()
+                        .toExtensions(repoBaseUrl)
+                }
             }
         } catch (e: Throwable) {
             logcat(LogPriority.ERROR, e) { "Failed to get extensions from $repoBaseUrl" }
@@ -133,7 +152,94 @@ internal class MangaExtensionApi {
     }
 
     fun getApkUrl(extension: MangaExtension.Available): String {
-        return "${extension.repoUrl}/apk/${extension.apkName}"
+        return extension.apkName.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+            ?: "${extension.repoUrl}/apk/${extension.apkName}"
+    }
+
+    @Serializable
+    private data class NetworkExtensionStore(
+        @ProtoNumber(101) val extensionList: ExtensionList? = null,
+    ) {
+        @Serializable
+        data class ExtensionList(
+            @ProtoNumber(1) val extensions: List<Extension>,
+        )
+
+        @Serializable
+        data class Extension(
+            @ProtoNumber(1) val name: String,
+            @ProtoNumber(2) val packageName: String,
+            @ProtoNumber(3) val resources: Resources,
+            @ProtoNumber(4) val extensionLib: String,
+            @ProtoNumber(5) val versionCode: Long,
+            @ProtoNumber(6) val versionName: String,
+            @ProtoNumber(7) val contentWarning: ContentWarning,
+            @ProtoNumber(9) val sources: List<Source>,
+        )
+
+        @Serializable
+        data class Resources(
+            @ProtoNumber(1) val apkUrl: String,
+            @ProtoNumber(2) val iconUrl: String,
+        )
+
+        @Serializable
+        data class Source(
+            @ProtoNumber(1) val id: Long,
+            @ProtoNumber(2) val name: String,
+            @ProtoNumber(3) val language: String,
+            @ProtoNumber(4) val homeUrl: String = "",
+        )
+
+        @Serializable
+        enum class ContentWarning {
+            @ProtoNumber(0)
+            UNSPECIFIED,
+            @ProtoNumber(1)
+            SAFE,
+            @ProtoNumber(2)
+            MIXED,
+            @ProtoNumber(3)
+            NSFW,
+        }
+    }
+
+    private fun List<NetworkExtensionStore.Extension>.toExtensions(
+        repoUrl: String,
+    ): List<MangaExtension.Available> {
+        return map { extension ->
+            MangaExtension.Available(
+                name = extension.name,
+                pkgName = extension.packageName,
+                versionName = extension.versionName,
+                versionCode = extension.versionCode,
+                libVersion = extension.extensionLib.toDouble(),
+                lang = extension.sources.map { it.language }.distinct().singleOrNull() ?: "all",
+                isNsfw = extension.contentWarning >= NetworkExtensionStore.ContentWarning.MIXED,
+                sources = extension.sources.map {
+                    MangaExtension.Available.MangaSource(
+                        id = it.id,
+                        lang = it.language,
+                        name = it.name,
+                        baseUrl = it.homeUrl,
+                    )
+                },
+                apkName = extension.resources.apkUrl,
+                iconUrl = extension.resources.iconUrl,
+                repoUrl = repoUrl,
+            )
+        }
+    }
+
+    private fun BufferedSource.decompressIfGzipped(): BufferedSource {
+        val isGzip = peek().use { peeked ->
+            try {
+                peeked.readShort().toInt() == 0x1f8b
+            } catch (_: Exception) {
+                false
+            }
+        }
+        return if (isGzip) gzip().buffer() else this
     }
 
     private fun ExtensionJsonObject.extractLibVersion(): Double {
