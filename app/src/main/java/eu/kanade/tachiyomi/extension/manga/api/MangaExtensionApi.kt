@@ -75,8 +75,9 @@ internal class MangaExtensionApi {
                 } else {
                     protoBuf.decodeFromByteArray<NetworkExtensionStore>(source.readByteArray())
                         .extensionList
+                        ?.extensions
                         .orEmpty()
-                        .toExtensions(repoBaseUrl)
+                        .toAvailableExtensions(repoBaseUrl)
                 }
             }
         } catch (e: Throwable) {
@@ -207,7 +208,7 @@ internal class MangaExtensionApi {
         }
     }
 
-    private fun List<NetworkExtensionStore.Extension>.toExtensions(
+    private fun List<NetworkExtensionStore.Extension>.toAvailableExtensions(
         repoUrl: String,
     ): List<MangaExtension.Available> {
         return map { extension ->
