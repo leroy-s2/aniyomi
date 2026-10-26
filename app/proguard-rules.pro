@@ -81,3 +81,5 @@
 
 # XmlUtil
 -keep public enum nl.adaptivity.xmlutil.EventType { *; }
+-keep class com.squareup.zstd.okio.OkioZstd { *; }
+-keep class com.squareup.zstd.** { *; }

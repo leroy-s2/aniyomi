@@ -77,7 +77,6 @@ fun MangaExtensionScreen(
     searchQuery: String?,
     onLongClickItem: (MangaExtension) -> Unit,
     onClickItemCancel: (MangaExtension) -> Unit,
-    onOpenWebView: (MangaExtension.Available) -> Unit,
     onInstallExtension: (MangaExtension.Available) -> Unit,
     onUninstallExtension: (MangaExtension) -> Unit,
     onUpdateExtension: (MangaExtension.Installed) -> Unit,
@@ -119,7 +118,6 @@ fun MangaExtensionScreen(
                     contentPadding = contentPadding,
                     onLongClickItem = onLongClickItem,
                     onClickItemCancel = onClickItemCancel,
-                    onOpenWebView = onOpenWebView,
                     onInstallExtension = onInstallExtension,
                     onUninstallExtension = onUninstallExtension,
                     onUpdateExtension = onUpdateExtension,
@@ -137,7 +135,6 @@ private fun ExtensionContent(
     state: MangaExtensionsScreenModel.State,
     contentPadding: PaddingValues,
     onLongClickItem: (MangaExtension) -> Unit,
-    onOpenWebView: (MangaExtension.Available) -> Unit,
     onClickItemCancel: (MangaExtension) -> Unit,
     onInstallExtension: (MangaExtension.Available) -> Unit,
     onUninstallExtension: (MangaExtension) -> Unit,
@@ -227,7 +224,6 @@ private fun ExtensionContent(
                     onLongClickItem = onLongClickItem,
                     onClickItemSecondaryAction = {
                         when (it) {
-                            is MangaExtension.Available -> onOpenWebView(it)
                             is MangaExtension.Installed -> onOpenExtension(it)
                             else -> {}
                         }
@@ -460,17 +456,6 @@ private fun ExtensionItemActions(
                         }
                     }
                     is MangaExtension.Available -> {
-                        if (extension.sources.isNotEmpty()) {
-                            IconButton(
-                                onClick = { onClickItemSecondaryAction(extension) },
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Public,
-                                    contentDescription = stringResource(MR.strings.action_open_in_web_view),
-                                )
-                            }
-                        }
-
                         IconButton(onClick = { onClickItemAction(extension) }) {
                             Icon(
                                 imageVector = Icons.Outlined.GetApp,

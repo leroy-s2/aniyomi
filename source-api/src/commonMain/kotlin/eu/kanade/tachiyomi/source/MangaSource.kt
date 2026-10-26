@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import eu.kanade.tachiyomi.util.awaitSingle
 import rx.Observable
 
@@ -46,6 +47,30 @@ interface MangaSource {
     @Suppress("DEPRECATION")
     suspend fun getChapterList(manga: SManga): List<SChapter> {
         return fetchChapterList(manga).awaitSingle()
+    }
+
+    /**
+     * Fetches updated information for a manga.
+     *
+     * The default implementation keeps compatibility with extensions built against
+     * extensions-lib 1.5 and older, which implement [getMangaDetails] and [getChapterList].
+     * Extensions built against tachiyomix 1.6 override this method directly.
+     *
+     * @since tachiyomix 1.6
+     * @param manga The manga to fetch updates for.
+     * @param chapters Existing chapters of the manga.
+     * @param fetchDetails Whether to include updated manga details.
+     * @param fetchChapters Whether to include available chapters.
+     */
+    suspend fun getMangaUpdate(
+        manga: SManga,
+        chapters: List<SChapter>,
+        fetchDetails: Boolean,
+        fetchChapters: Boolean,
+    ): SMangaUpdate {
+        val updatedManga = if (fetchDetails) getMangaDetails(manga) else manga
+        val updatedChapters = if (fetchChapters) getChapterList(manga) else chapters
+        return SMangaUpdate(updatedManga, updatedChapters)
     }
 
     /**

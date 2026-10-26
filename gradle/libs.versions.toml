@@ -10,6 +10,7 @@ sqlite = "2.4.0"
 voyager = "2.2.21-1.10.3"
 spotless = "7.0.2"
 ktlint-core = "1.7.0"
+androidx-webkit = "1.18.0"
 
 [libraries]
 desugar = "com.android.tools:desugar_jdk_libs:2.1.5"
@@ -39,6 +40,7 @@ sqlite-ktx = { module = "androidx.sqlite:sqlite-ktx", version.ref = "sqlite" }
 sqlite-android = "com.github.requery:sqlite-android:3.45.0"
 
 preferencektx = "androidx.preference:preference-ktx:1.2.1"
+androidx-webkit = { module = "androidx.webkit:webkit", version.ref = "androidx-webkit" }
 
 injekt = "com.github.mihonapp:injekt:91edab2317"
 
