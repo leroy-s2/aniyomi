@@ -116,7 +116,9 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         libraryPreferences.lastUpdatedTimestamp().set(Instant.now().toEpochMilli())
 
         val categoryId = inputData.getLong(KEY_CATEGORY, -1L)
-        addMangaToQueue(categoryId)
+        // Item restrictions are meant for scheduled updates. A manual update is an explicit
+        // request, so it must process every entry in the selected scope.
+        addMangaToQueue(categoryId, ignoreItemRestrictions = tags.contains(WORK_NAME_MANUAL))
 
         return withIOContext {
             try {
@@ -154,7 +156,7 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
      *
      * @param categoryId the ID of the category to update, or -1 if no category specified.
      */
-    private suspend fun addMangaToQueue(categoryId: Long) {
+    private suspend fun addMangaToQueue(categoryId: Long, ignoreItemRestrictions: Boolean = false) {
         val libraryManga = getLibraryManga.await()
 
         val listToUpdate = if (categoryId != -1L) {
@@ -179,7 +181,11 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                 .distinctBy { it.manga.id }
         }
 
-        val restrictions = libraryPreferences.autoUpdateItemRestrictions().get()
+        val restrictions = if (ignoreItemRestrictions) {
+            emptySet()
+        } else {
+            libraryPreferences.autoUpdateItemRestrictions().get()
+        }
         val skippedUpdates = mutableListOf<Pair<Manga, String?>>()
         val (_, fetchWindowUpperBound) = mangaFetchInterval.getWindow(ZonedDateTime.now())
 
