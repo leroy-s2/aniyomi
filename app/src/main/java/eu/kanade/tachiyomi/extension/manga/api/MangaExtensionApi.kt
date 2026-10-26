@@ -14,23 +14,23 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromByteArray
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.okio.decodeFromBufferedSource
 import kotlinx.serialization.protobuf.ProtoBuf
 import kotlinx.serialization.protobuf.ProtoNumber
-import kotlinx.serialization.json.okio.decodeFromBufferedSource
 import logcat.LogPriority
 import mihon.domain.extensionrepo.manga.interactor.GetMangaExtensionRepo
 import mihon.domain.extensionrepo.manga.interactor.UpdateMangaExtensionRepo
 import mihon.domain.extensionrepo.model.ExtensionRepo
+import okio.BufferedSource
+import okio.buffer
+import okio.gzip
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
-import okio.BufferedSource
-import okio.buffer
-import okio.gzip
-import kotlin.coroutines.cancellation.CancellationException
 import uy.kohesive.injekt.injectLazy
 import java.time.Instant
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.days
 
 internal class MangaExtensionApi {
@@ -195,10 +195,13 @@ internal class MangaExtensionApi {
         enum class ContentWarning {
             @ProtoNumber(0)
             UNSPECIFIED,
+
             @ProtoNumber(1)
             SAFE,
+
             @ProtoNumber(2)
             MIXED,
+
             @ProtoNumber(3)
             NSFW,
         }
