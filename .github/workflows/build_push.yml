@@ -5,10 +5,9 @@ permissions:
 
 on:
   push:
-    branches:
-      - '*'
     tags:
       - v*
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -41,17 +40,29 @@ jobs:
       - name: Run unit tests
         run: ./gradlew testReleaseUnitTest
 
+      - name: Validate release APKs
+        run: |
+          for variant in universal arm64-v8a armeabi-v7a x86 x86_64; do
+            apk="app/build/outputs/apk/release/app-${variant}-release-unsigned.apk"
+            if [ ! -s "$apk" ]; then
+              echo "::error::Missing or empty APK: $apk"
+              exit 1
+            fi
+          done
+
       - name: Upload APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: arm64-v8a-${{ github.sha }}
           path: app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk
+          if-no-files-found: error
 
       - name: Upload mapping
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mapping-${{ github.sha }}
           path: app/build/outputs/mapping/release
+          if-no-files-found: error
 
       # Sign APK and create release for tags
 
@@ -119,6 +130,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') && github.repository == 'aniyomiorg/aniyomi'
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
+          fail_on_unmatched_files: true
           tag_name: ${{ env.VERSION_TAG }}
           name: Aniyomi ${{ env.VERSION_TAG }}
           body: |
@@ -148,6 +160,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') && github.repository != 'aniyomiorg/aniyomi'
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
+          fail_on_unmatched_files: true
           tag_name: ${{ env.VERSION_TAG }}
           name: Aniyomi ${{ env.VERSION_TAG }} (unsigned test build)
           body: |
