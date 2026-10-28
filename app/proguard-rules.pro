@@ -1,5 +1,10 @@
 -dontobfuscate
 
+# WindowManager loads these optional APIs from the device at runtime.
+# Suppress only their missing-class warnings, not application dependencies.
+-dontwarn androidx.window.sidecar.**
+-dontwarn androidx.window.extensions.**
+
 -keep,allowoptimization class eu.kanade.**
 -keep,allowoptimization class tachiyomi.**
 -keep,allowoptimization class mihon.**
