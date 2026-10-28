@@ -18,8 +18,8 @@ Forecast: fewer than 100 authored changed lines. Delivery: ask-on-risk; one feat
 - `git diff --check`: passed.
 - `./gradlew assembleRelease -Penable-updater`: blocked before compilation by missing Android SDK (`SDK location not found`). No local APK or R8 success is claimed. Java 25 is installed locally; Actions explicitly uses Java 17.
 - No refactor needed. PR builds remain enabled; ordinary branch pushes no longer run release CI. Manual dispatch on a version tag can retry an existing release; dispatch on a branch only builds artifacts.
-- RDD assessment/review and Engram mirror remain parent-owned pending actions. Parent records commit identities below.
+- RDD assessment and preflight refused the runtime with `immutable_review_transport_unsupported` before starting a transaction. Review is unavailable; no approval is claimed. Engram mirror is parent-owned.
 - Work units: T1 `b20c166c3` (`fix(build): handle optional WindowManager device APIs`); T2 `ae93d06ad` (`fix(ci): build tags once and require release APKs`). Any subsequent bookkeeping commit does not change these implementation boundaries.
 
 ## Next step
-Commit local work units; parent runs native review and verifies the existing v0.18.2.5 assets. Remote delivery and a successful Actions build remain pending.
+Existing v0.18.2.5 has five uploaded nonzero APKs; downloaded ARM64 APK passed ZIP integrity and matched GitHub's SHA-256. Independent local verification, remote delivery authorization, and a successful Actions build remain pending. Do not create a duplicate release.
