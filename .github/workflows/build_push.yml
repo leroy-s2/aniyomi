@@ -74,7 +74,7 @@ jobs:
           echo "VERSION_TAG=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
 
       - name: Sign APK
-        if: startsWith(github.ref, 'refs/tags/') && github.repository == 'aniyomiorg/aniyomi'
+        if: startsWith(github.ref, 'refs/tags/')
         uses: r0adkll/sign-android-release@f30bdd30588842ac76044ecdbd4b6d0e3e813478
         with:
           releaseDirectory: app/build/outputs/apk/release
@@ -86,7 +86,7 @@ jobs:
           BUILD_TOOLS_VERSION: '35.0.1'
 
       - name: Clean up build artifacts
-        if: startsWith(github.ref, 'refs/tags/') && github.repository == 'aniyomiorg/aniyomi'
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           set -e
 
@@ -110,24 +110,8 @@ jobs:
           sha=`sha256sum aniyomi-x86_64-${{ env.VERSION_TAG }}.apk | awk '{ print $1 }'`
           echo "APK_X86_64_SHA=$sha" >> $GITHUB_ENV
 
-      - name: Prepare unsigned fork artifacts
-        if: startsWith(github.ref, 'refs/tags/') && github.repository != 'aniyomiorg/aniyomi'
-        run: |
-          set -e
-
-          mv app/build/outputs/apk/release/app-universal-release-unsigned.apk \
-            aniyomi-${{ env.VERSION_TAG }}-unsigned.apk
-          mv app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk \
-            aniyomi-arm64-v8a-${{ env.VERSION_TAG }}-unsigned.apk
-          mv app/build/outputs/apk/release/app-armeabi-v7a-release-unsigned.apk \
-            aniyomi-armeabi-v7a-${{ env.VERSION_TAG }}-unsigned.apk
-          mv app/build/outputs/apk/release/app-x86-release-unsigned.apk \
-            aniyomi-x86-${{ env.VERSION_TAG }}-unsigned.apk
-          mv app/build/outputs/apk/release/app-x86_64-release-unsigned.apk \
-            aniyomi-x86_64-${{ env.VERSION_TAG }}-unsigned.apk
-
-      - name: Create official Release
-        if: startsWith(github.ref, 'refs/tags/') && github.repository == 'aniyomiorg/aniyomi'
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
           fail_on_unmatched_files: true
@@ -151,30 +135,7 @@ jobs:
             aniyomi-armeabi-v7a-${{ env.VERSION_TAG }}.apk
             aniyomi-x86-${{ env.VERSION_TAG }}.apk
             aniyomi-x86_64-${{ env.VERSION_TAG }}.apk
-          draft: true
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create fork pre-release
-        if: startsWith(github.ref, 'refs/tags/') && github.repository != 'aniyomiorg/aniyomi'
-        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
-        with:
-          fail_on_unmatched_files: true
-          tag_name: ${{ env.VERSION_TAG }}
-          name: Aniyomi ${{ env.VERSION_TAG }} (unsigned test build)
-          body: |
-            Unofficial unsigned test build from `${{ github.repository }}`.
-
-            This build is intended for testing only. Android may require uninstalling
-            an existing Aniyomi installation signed with a different key.
-          files: |
-            aniyomi-${{ env.VERSION_TAG }}-unsigned.apk
-            aniyomi-arm64-v8a-${{ env.VERSION_TAG }}-unsigned.apk
-            aniyomi-armeabi-v7a-${{ env.VERSION_TAG }}-unsigned.apk
-            aniyomi-x86-${{ env.VERSION_TAG }}-unsigned.apk
-            aniyomi-x86_64-${{ env.VERSION_TAG }}-unsigned.apk
           draft: false
-          prerelease: true
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
