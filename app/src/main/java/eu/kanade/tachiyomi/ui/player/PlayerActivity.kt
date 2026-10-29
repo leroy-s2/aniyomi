@@ -72,6 +72,7 @@ import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.torrent.service.TorrentServerService
 import eu.kanade.tachiyomi.databinding.PlayerLayoutBinding
+import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
 import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
 import eu.kanade.tachiyomi.ui.player.controls.PlayerControls
@@ -94,6 +95,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
@@ -127,6 +129,7 @@ class PlayerActivity : BaseActivity() {
     private val audioPreferences: AudioPreferences = Injekt.get()
     private val advancedPlayerPreferences: AdvancedPlayerPreferences = Injekt.get()
     private val networkPreferences: NetworkPreferences = Injekt.get()
+    private val network: NetworkHelper = Injekt.get()
     private val storageManager: StorageManager = Injekt.get()
     private val torrentServerApi: TorrentServerApi = Injekt.get()
     private val torrentServerUtils: TorrentServerUtils = Injekt.get()
@@ -1209,6 +1212,17 @@ class PlayerActivity : BaseActivity() {
             .toMultimap()
             .mapValues { it.value.firstOrNull() ?: "" }
             .toMutableMap()
+
+        // Player goes through mpv, not OkHttp, so the cookies that cleared Cloudflare have to be
+        // forwarded by hand.
+        video.videoUrl.toHttpUrlOrNull()?.let { videoUrl ->
+            if (videoUrl.host != "localhost" &&
+                videoUrl.host != "127.0.0.1" &&
+                headers.keys.none { it.equals("Cookie", ignoreCase = true) }
+            ) {
+                network.cookieJar.headerValue(videoUrl)?.let { headers["Cookie"] = it }
+            }
+        }
 
         val httpHeaderString = headers.map {
             it.key + ": " + it.value.replace(",", "\\,")

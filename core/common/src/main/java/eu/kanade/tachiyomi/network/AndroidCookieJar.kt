@@ -29,6 +29,17 @@ class AndroidCookieJar : CookieJar {
         }
     }
 
+    /**
+     * Value ready for a `Cookie` header, or null when there are no cookies for [url].
+     *
+     * Player and downloader run outside OkHttp, so they have to carry the cookies themselves.
+     */
+    fun headerValue(url: HttpUrl): String? {
+        return get(url)
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString("; ") { "${it.name}=${it.value}" }
+    }
+
     fun remove(url: HttpUrl, cookieNames: List<String>? = null, maxAge: Int = -1): Int {
         val urlString = url.toString()
         val cookies = manager.getCookie(urlString) ?: return 0

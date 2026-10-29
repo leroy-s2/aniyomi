@@ -29,6 +29,7 @@ class WebViewScreen(
             onNavigateUp = { navigator.pop() },
             initialTitle = initialTitle,
             url = url,
+            defaultUserAgentProvider = screenModel.defaultUserAgentProvider,
             headers = screenModel.headers,
             onUrlChange = { assistUrl = it },
             onShare = { screenModel.shareWebpage(context, it) },

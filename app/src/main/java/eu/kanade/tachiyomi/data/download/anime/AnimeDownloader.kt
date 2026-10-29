@@ -25,6 +25,7 @@ import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateNotifier
 import eu.kanade.tachiyomi.data.notification.NotificationHandler
 import eu.kanade.tachiyomi.data.torrent.service.TorrentServerService
+import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.player.loader.EpisodeLoader
 import eu.kanade.tachiyomi.ui.player.loader.HosterLoader
@@ -54,6 +55,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import logcat.LogPriority
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.storage.extension
 import tachiyomi.core.common.util.lang.launchIO
@@ -88,6 +90,7 @@ class AnimeDownloader(
     private val torrentServerApi: TorrentServerApi = Injekt.get(),
     private val torrentServerUtils: TorrentServerUtils = Injekt.get(),
     private val torrentPreferences: TorrentPreferences = Injekt.get(),
+    private val network: NetworkHelper = Injekt.get(),
 ) {
     /**
      * Store for persisting downloads across restarts.
@@ -576,12 +579,25 @@ class AnimeDownloader(
         val ffmpegFilename = { videoFile.uri.toFFmpegString(context) }
 
         val headers = video.headers ?: download.source.headers
-        val headerOptions = headers.joinToString("", "-headers '", "'") {
-            "${it.first}: ${it.second}\r\n"
+
+        // ffmpeg runs outside OkHttp, so the cookies that cleared Cloudflare have to be forwarded
+        // by hand, per input URL (tracks can live on a different host).
+        fun headerOptionsFor(url: String): String {
+            val cookies = url.toHttpUrlOrNull()
+                ?.takeIf { it.host != "localhost" && it.host != "127.0.0.1" }
+                ?.let(network.cookieJar::headerValue)
+            val all = if (cookies != null && headers.none { it.first.equals("Cookie", true) }) {
+                headers.newBuilder().add("Cookie", cookies).build()
+            } else {
+                headers
+            }
+            return all.joinToString("", "-headers '", "'") {
+                "${it.first}: ${it.second}\r\n"
+            }
         }
 
         FFmpegKitConfig.setLogRedirectionStrategy(LogRedirectionStrategy.ALWAYS_PRINT_LOGS)
-        val ffmpegOptions = getFFmpegOptions(video, headerOptions, ffmpegFilename())
+        val ffmpegOptions = getFFmpegOptions(video, ::headerOptionsFor, ffmpegFilename())
         val ffprobeCommand = { file: String, ffprobeHeaders: String? ->
             FFmpegKitConfig.parseArguments(
                 "${ffprobeHeaders?.plus(" ") ?: ""}-v quiet -show_entries " +
@@ -607,7 +623,7 @@ class AnimeDownloader(
             }
         }
 
-        duration = getDuration(ffprobeCommand(video.videoUrl, headerOptions))?.toLong() ?: 0L
+        duration = getDuration(ffprobeCommand(video.videoUrl, headerOptionsFor(video.videoUrl)))?.toLong() ?: 0L
 
         suspendCancellableCoroutine { continuation ->
             val session = FFmpegKit.executeWithArgumentsAsync(
@@ -631,11 +647,15 @@ class AnimeDownloader(
         }
     }
 
-    private fun getFFmpegOptions(video: Video, headerOptions: String, ffmpegFilename: String): Array<String> {
+    private fun getFFmpegOptions(
+        video: Video,
+        headerOptionsFor: (String) -> String,
+        ffmpegFilename: String,
+    ): Array<String> {
         fun formatInputs(tracks: List<Track>) = tracks.joinToString(" ", postfix = " ") {
             buildList {
                 if (it.url.startsWith("http")) {
-                    add(headerOptions)
+                    add(headerOptionsFor(it.url))
                 }
                 add("-i")
                 add("\"${it.url}\"")
@@ -667,7 +687,7 @@ class AnimeDownloader(
 
         val videoInput = buildList {
             if (video.videoUrl.startsWith("http")) {
-                add(headerOptions)
+                add(headerOptionsFor(video.videoUrl))
             }
             add(sourceStreamOptions)
             add("-i")

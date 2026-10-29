@@ -15,6 +15,7 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import eu.kanade.tachiyomi.network.AndroidCookieJar
 import eu.kanade.tachiyomi.util.system.isOutdated
+import eu.kanade.tachiyomi.util.system.toWebViewHeaders
 import eu.kanade.tachiyomi.util.system.toast
 import logcat.LogPriority
 import okhttp3.HttpUrl
@@ -136,13 +137,16 @@ class CloudflareInterceptor(
         } else {
             originalRequest.url.newBuilder().encodedPath("/").query(null).fragment(null).build().toString()
         }
-        val headers = parseHeaders(originalRequest.headers)
+        val headers = originalRequest.headers.toWebViewHeaders()
 
         executor.execute {
             val view = createWebView(originalRequest)
             webview = view
 
             fun onChallengeEvent(event: String) {
+                logcat(LogPriority.DEBUG) {
+                    "Cloudflare challenge event: $event for ${originalRequest.url.host}"
+                }
                 when (event) {
                     // The challenge cannot be solved non-interactively, abort.
                     "interactiveBegin" -> latch.countDown()

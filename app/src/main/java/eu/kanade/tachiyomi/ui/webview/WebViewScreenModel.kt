@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toShareIntent
+import eu.kanade.tachiyomi.util.system.toWebViewHeaders
 import eu.kanade.tachiyomi.util.system.toast
 import logcat.LogPriority
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -27,17 +28,19 @@ class WebViewScreenModel(
 
     var headers = emptyMap<String, String>()
 
+    val defaultUserAgentProvider: () -> String = { network.defaultUserAgentProvider() }
+
     init {
         sourceId?.let { MangaSourceManager.get(it) as? HttpSource }?.let { mangasource ->
             try {
-                headers = mangasource.headers.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
+                headers = mangasource.headers.toWebViewHeaders()
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Failed to build headers" }
             }
         }
         sourceId?.let { AnimeSourceManager.get(it) as? AnimeHttpSource }?.let { animesource ->
             try {
-                headers = animesource.headers.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
+                headers = animesource.headers.toWebViewHeaders()
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Failed to build headers" }
             }

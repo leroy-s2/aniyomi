@@ -6,9 +6,14 @@ import android.content.pm.PackageManager
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
+import androidx.webkit.UserAgentMetadata
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.suspendCancellableCoroutine
 import logcat.LogPriority
+import okhttp3.Headers
 import tachiyomi.core.common.util.system.logcat
+import java.util.Locale
 import kotlin.coroutines.resume
 
 object WebViewUtil {
@@ -17,21 +22,27 @@ object WebViewUtil {
 
     const val MINIMUM_WEBVIEW_VERSION = 118
 
+    const val FALLBACK_USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/141.0.0.0 Mobile Safari/537.36"
+
     /**
-     * Uses the WebView's user agent string to create something similar to what Chrome on Android
-     * would return.
+     * User agent matching the installed WebView, in the reduced form Chrome on Android sends.
      *
-     * Example of WebView user agent string:
-     *   Mozilla/5.0 (Linux; Android 13; Pixel 7 Build/TQ3A.230901.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36
-     *
-     * Example of Chrome on Android:
-     *   Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.3
+     * Cloudflare binds `cf_clearance` to the user agent, so every request and the WebView that
+     * solves the challenge must present the same one.
      */
-    fun getInferredUserAgent(context: Context): String {
-        return WebView(context)
-            .getDefaultUserAgentString()
-            .replace("; Android .*?\\)".toRegex(), "; Android 10; K)")
-            .replace("Version/.* Chrome/".toRegex(), "Chrome/")
+    fun getDefaultUserAgent(): String {
+        return runCatching {
+            val major = WebView.getCurrentWebViewPackage()
+                ?.versionName
+                ?.substringBefore('.')
+                ?.toIntOrNull()
+                ?: return@runCatching FALLBACK_USER_AGENT
+
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/$major.0.0.0 Mobile Safari/537.36"
+        }.getOrDefault(FALLBACK_USER_AGENT)
     }
 
     fun getVersion(context: Context): String {
@@ -94,6 +105,80 @@ fun WebView.setDefaultSettings() {
 
     CookieManager.getInstance().acceptThirdPartyCookies(this)
 }
+
+/**
+ * Sets the user agent along with the matching user agent metadata, which Chromium uses to populate
+ * the `Sec-CH-UA` client hints. Without this the hints keep advertising the real WebView brand and
+ * version, contradicting the spoofed user agent.
+ */
+fun WebView.setUserAgent(userAgent: String) {
+    settings.userAgentString = userAgent
+
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) return
+
+    val versionMatch = CHROME_VERSION_REGEX.find(userAgent) ?: return
+    val majorVersion = versionMatch.groupValues[1]
+    val fullVersion = majorVersion + versionMatch.groupValues[2].ifEmpty { ".0.0.0" }
+
+    try {
+        val metadata = WebSettingsCompat.getUserAgentMetadata(settings)
+        val brandVersionList = metadata.brandVersionList.map { brandVersion ->
+            val brand = when (brandVersion.brand) {
+                WEBVIEW_BRAND -> CHROME_BRAND
+                CHROMIUM_BRAND -> CHROMIUM_BRAND
+                else -> return@map brandVersion
+            }
+
+            UserAgentMetadata.BrandVersion.Builder()
+                .setBrand(brand)
+                .setMajorVersion(majorVersion)
+                .setFullVersion(fullVersion)
+                .build()
+        }
+
+        WebSettingsCompat.setUserAgentMetadata(
+            settings,
+            UserAgentMetadata.Builder(metadata)
+                .setBrandVersionList(brandVersionList)
+                .setFullVersion(fullVersion)
+                .build(),
+        )
+    } catch (e: Exception) {
+        logcat(LogPriority.ERROR, e) { "Failed to set user agent metadata" }
+    }
+}
+
+fun Headers.toWebViewHeaders(): Map<String, String> {
+    return this
+        // Keeping unsafe header makes webview throw [net::ERR_INVALID_ARGUMENT]
+        .filter { (name, value) ->
+            isRequestHeaderSafe(name, value)
+        }
+        .groupBy(keySelector = { (name, _) -> name }) { (_, value) -> value }
+        .mapValues { it.value.getOrNull(0).orEmpty() }
+}
+
+// Based on [IsRequestHeaderSafe] in
+// https://source.chromium.org/chromium/chromium/src/+/main:services/network/public/cpp/header_util.cc
+private fun isRequestHeaderSafe(_name: String, _value: String): Boolean {
+    val name = _name.lowercase(Locale.ENGLISH)
+    val value = _value.lowercase(Locale.ENGLISH)
+    if (name in unsafeHeaderNames || name.startsWith("proxy-")) return false
+    if (name == "connection" && value == "upgrade") return false
+    return true
+}
+
+private val unsafeHeaderNames = listOf(
+    "content-length", "host", "trailer", "te", "upgrade", "cookie2", "keep-alive",
+    "transfer-encoding", "set-cookie",
+    // Renderer is killed if it doesn't match the request initiator
+    "origin",
+)
+
+private const val WEBVIEW_BRAND = "Android WebView"
+private const val CHROMIUM_BRAND = "Chromium"
+private const val CHROME_BRAND = "Google Chrome"
+private val CHROME_VERSION_REGEX = """Chrome/(\d+)(\.[\d.]+)?""".toRegex()
 
 private fun WebView.getWebViewMajorVersion(): Int {
     val uaRegexMatch = """.*Chrome/(\d+)\..*""".toRegex().matchEntire(getDefaultUserAgentString())
